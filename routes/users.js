@@ -85,8 +85,8 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
     if (!plan || !years) {
       return res.status(400).json({ error: 'plan and years are required' });
     }
-    if (!['monthly', 'yearly'].includes(plan)) {
-      return res.status(400).json({ error: 'plan must be monthly or yearly' });
+    if (plan !== 'yearly') {
+      return res.status(400).json({ error: 'plan must be yearly' });
     }
 
     const user = await User.findById(req.params.id);
@@ -105,12 +105,7 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
 
     const yearsNum = parseInt(years);
     const periodEnd = new Date(baseDate);
-    if (plan === 'yearly') {
-      periodEnd.setFullYear(periodEnd.getFullYear() + yearsNum);
-    } else {
-      // monthly: years param treated as months
-      periodEnd.setMonth(periodEnd.getMonth() + yearsNum);
-    }
+    periodEnd.setFullYear(periodEnd.getFullYear() + yearsNum);
 
     const amountPaise = 0; // admin granted — no charge
     const paymentId = `admin-manual-${Date.now()}`;

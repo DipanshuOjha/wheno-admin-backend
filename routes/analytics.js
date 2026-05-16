@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
     let newUsersThisWeek = 0;
     let newUsersThisMonth = 0;
 
-    const planBreakdown = { free: 0, yearly: 0, monthly: 0 };
+    const planBreakdown = { free: 0, yearly: 0 };
     const allPayments = [];
 
     for (const user of allUsers) {
