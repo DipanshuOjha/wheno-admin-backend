@@ -12,8 +12,6 @@ const icsRoutes = require('./routes/ics');
 
 const app = express();
 
-connectDB();
-
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
