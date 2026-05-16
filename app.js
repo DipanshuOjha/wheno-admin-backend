@@ -16,17 +16,20 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
+  'https://wheno-admin-frontend.vercel.app',
   process.env.ADMIN_FRONTEND_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      // Allow no-origin requests (curl, Postman, same-origin)
+      if (!origin) return callback(null, true);
+      // Allow any *.vercel.app preview deploy for this project
+      if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+      callback(null, false);
     },
     credentials: true,
   })
