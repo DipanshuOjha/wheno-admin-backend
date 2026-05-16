@@ -65,10 +65,16 @@ router.get('/', async (req, res) => {
     }
 
     // Recent 10 payments sorted by paidAt desc
+    // Note: same user can appear multiple times here (payment ledger, not user list)
     allPayments.sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
     const recentPayments = allPayments.slice(0, 10);
 
-    // Trial conversion rate: proUsers / (proUsers + freeUsers past 7 days) * 100
+    // Unique paying users — count of distinct users who have ≥1 real payment (not admin-granted)
+    const uniquePayingUsers = allUsers.filter(u =>
+      (u.payments || []).some(p => p.amountPaise > 0)
+    ).length;
+
+    // Trial conversion rate: proUsers / (proUsers + freeUsers past trial) * 100
     const freeNonTrial = freeUsers - trialUsers;
     const denominator = proUsers + freeNonTrial;
     const trialConversionRate = denominator > 0
@@ -76,12 +82,13 @@ router.get('/', async (req, res) => {
       : 0;
 
     res.json({
-      totalUsers,
-      proUsers,
+      totalUsers,        // unique users (never double-counts)
+      proUsers,          // unique users with active paid plan
       freeUsers,
       trialUsers,
       expiredUsers,
-      totalRevenuePaise,
+      uniquePayingUsers, // unique users who paid at least once (renewals don't inflate this)
+      totalRevenuePaise, // sum of all payments — multi-purchase users correctly add to revenue
       newUsersThisWeek,
       newUsersThisMonth,
       planBreakdown,

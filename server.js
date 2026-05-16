@@ -16,8 +16,11 @@ connectDB();
 
 // CORS
 const allowedOrigins = [
-  process.env.ADMIN_FRONTEND_URL || 'http://localhost:5173',
-];
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  process.env.ADMIN_FRONTEND_URL,
+].filter(Boolean);
 app.use(
   cors({
     origin: (origin, callback) => {

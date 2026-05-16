@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { requireAdmin } = require('../middleware/auth');
+const requireActionPassword = require('../middleware/actionPassword');
 
 // All routes require admin auth
 router.use(requireAdmin);
@@ -77,7 +78,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/admin/users/:id/subscription — grant/extend subscription
-router.post('/:id/subscription', async (req, res) => {
+router.post('/:id/subscription', requireActionPassword, async (req, res) => {
   try {
     const { plan, years, note } = req.body;
 
@@ -148,7 +149,7 @@ router.post('/:id/subscription', async (req, res) => {
 });
 
 // DELETE /api/admin/users/:id/subscription — cancel subscription
-router.delete('/:id/subscription', async (req, res) => {
+router.delete('/:id/subscription', requireActionPassword, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });

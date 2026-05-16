@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const CityRequest = require('../models/CityRequest');
 const { requireAdmin } = require('../middleware/auth');
+const requireActionPassword = require('../middleware/actionPassword');
 
 router.use(requireAdmin);
 
@@ -25,7 +26,7 @@ router.get('/', async (req, res) => {
 });
 
 // PATCH /api/admin/requests/:id — update status
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireActionPassword, async (req, res) => {
   try {
     const { status } = req.body;
     if (!['pending', 'added', 'rejected'].includes(status)) {
@@ -47,7 +48,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // DELETE /api/admin/requests/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireActionPassword, async (req, res) => {
   try {
     const request = await CityRequest.findByIdAndDelete(req.params.id);
     if (!request) return res.status(404).json({ error: 'Request not found' });
