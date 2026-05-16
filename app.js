@@ -57,6 +57,45 @@ app.get('/api/admin/health', (req, res) => {
   });
 });
 
+// Public test endpoint — no auth required
+app.get('/api/admin/test', async (req, res) => {
+  const results = {};
+
+  // 1. Backend alive
+  results.backend = { ok: true, message: 'Backend is reachable' };
+
+  // 2. MongoDB state
+  const mongoState = mongoose.connection.readyState;
+  const mongoOk = mongoState === 1;
+  results.mongodb = {
+    ok: mongoOk,
+    state: ['disconnected','connected','connecting','disconnecting'][mongoState] || 'unknown',
+  };
+
+  // 3. DB read — ping the database
+  if (mongoOk) {
+    try {
+      await mongoose.connection.db.admin().ping();
+      results.dbPing = { ok: true, message: 'DB ping successful' };
+    } catch (e) {
+      results.dbPing = { ok: false, message: e.message };
+    }
+  } else {
+    results.dbPing = { ok: false, message: 'Skipped — MongoDB not connected' };
+  }
+
+  // 4. Environment variables present (values redacted)
+  const requiredEnvs = ['MONGODB_URI','JWT_SECRET','ADMIN_USERNAME','ADMIN_PASSWORD','ADMIN_ACTION_PASSWORD'];
+  results.env = {};
+  for (const key of requiredEnvs) {
+    results.env[key] = process.env[key] ? 'set' : 'MISSING';
+  }
+  const envOk = requiredEnvs.every(k => !!process.env[k]);
+
+  const allOk = results.backend.ok && mongoOk && results.dbPing.ok && envOk;
+  res.status(allOk ? 200 : 500).json({ ok: allOk, results });
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
