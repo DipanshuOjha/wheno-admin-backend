@@ -80,7 +80,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/admin/users/:id/subscription — grant/extend subscription
 router.post('/:id/subscription', requireActionPassword, async (req, res) => {
   try {
-    const { plan, years, note } = req.body;
+    const { plan, years, note, amountPaise } = req.body;
 
     if (!plan || !years) {
       return res.status(400).json({ error: 'plan and years are required' });
@@ -107,7 +107,7 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
     const periodEnd = new Date(baseDate);
     periodEnd.setFullYear(periodEnd.getFullYear() + yearsNum);
 
-    const amountPaise = 0; // admin granted — no charge
+    const recordedAmount = typeof amountPaise === 'number' && amountPaise > 0 ? amountPaise : 0;
     const paymentId = `admin-manual-${Date.now()}`;
 
     user.subscription.plan = plan;
@@ -125,7 +125,7 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
       orderId: null,
       plan,
       years: yearsNum,
-      amountPaise,
+      amountPaise: recordedAmount,
       currency: 'INR',
       periodEnd,
       paidAt: now,
