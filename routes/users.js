@@ -10,7 +10,7 @@ router.use(requireAdmin);
 // GET /api/admin/users — list with pagination, search, plan filter
 router.get('/', async (req, res) => {
   try {
-    const { search = '', plan = '', page = 1, limit = 20 } = req.query;
+    const { search = '', plan = '', status = '', joinedFrom = '', joinedTo = '', page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const query = {};
@@ -22,6 +22,20 @@ router.get('/', async (req, res) => {
     }
     if (plan) {
       query['subscription.plan'] = plan;
+    }
+    if (status === 'cancelled') {
+      query['subscription.status'] = { $in: ['cancelled', 'expired'] };
+    } else if (status === 'active') {
+      query['subscription.status'] = 'active';
+    }
+    if (joinedFrom || joinedTo) {
+      query.createdAt = {};
+      if (joinedFrom) query.createdAt.$gte = new Date(joinedFrom);
+      if (joinedTo) {
+        const end = new Date(joinedTo);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
     }
 
     const [users, total] = await Promise.all([
