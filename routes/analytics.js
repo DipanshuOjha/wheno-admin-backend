@@ -101,4 +101,22 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/admin/analytics/data-range — min/max years of panchanga data in DB
+router.get('/data-range', async (req, res) => {
+  try {
+    const PanchangaDay = require('../models/PanchangaDay');
+    const [first, last] = await Promise.all([
+      PanchangaDay.findOne({}).sort({ date: 1 }).select('date').lean(),
+      PanchangaDay.findOne({}).sort({ date: -1 }).select('date').lean(),
+    ]);
+    const now = new Date().getFullYear();
+    const minYear = first ? parseInt(first.date.slice(0, 4)) : now;
+    const maxYear = last  ? parseInt(last.date.slice(0, 4))  : now;
+    res.json({ minYear, maxYear });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
