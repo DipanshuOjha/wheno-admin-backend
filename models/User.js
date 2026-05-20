@@ -59,6 +59,7 @@ const userSchema = new mongoose.Schema(
       currentPeriodEnd: Date,
       startedAt: Date,
       vsYear: Number,
+      trialEnd: Date,
     },
     payments: [{
       paymentId:   { type: String, required: true },
