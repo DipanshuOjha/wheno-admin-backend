@@ -9,86 +9,116 @@ router.use(requireAdmin);
 router.get('/', async (req, res) => {
   try {
     const now = new Date();
-    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
     const startOfWeek = new Date(now);
     startOfWeek.setDate(now.getDate() - now.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const allUsers = await User.find({})
-      .select('name email createdAt subscription payments')
-      .lean();
-
-    const totalUsers = allUsers.length;
-
-    let proUsers = 0;
-    let freeUsers = 0;
-    let expiredUsers = 0;
-    let trialUsers = 0;
-    let totalRevenuePaise = 0;
-    let newUsersThisWeek = 0;
-    let newUsersThisMonth = 0;
-
-    const planBreakdown = { free: 0, yearly: 0 };
-    const allPayments = [];
-
-    for (const user of allUsers) {
-      const plan = user.subscription?.plan || 'free';
-      const status = user.subscription?.status || 'active';
-      const createdAt = new Date(user.createdAt);
-
-      if (createdAt >= startOfWeek) newUsersThisWeek++;
-      if (createdAt >= startOfMonth) newUsersThisMonth++;
-
-      planBreakdown[plan] = (planBreakdown[plan] || 0) + 1;
-
-      if (plan !== 'free' && status === 'active') {
-        proUsers++;
-      } else if (plan === 'free') {
-        freeUsers++;
-        if (createdAt >= sevenDaysAgo) trialUsers++;
-      } else if (status === 'expired' || status === 'cancelled') {
-        expiredUsers++;
+    const [agg] = await User.aggregate([
+      {
+        $facet: {
+          counts: [
+            {
+              $group: {
+                _id: null,
+                totalUsers: { $sum: 1 },
+                proUsers: {
+                  $sum: {
+                    $cond: [{
+                      $and: [
+                        { $ne: [{ $ifNull: ['$subscription.plan', 'free'] }, 'free'] },
+                        { $eq: ['$subscription.status', 'active'] },
+                      ]
+                    }, 1, 0]
+                  }
+                },
+                freeUsers: {
+                  $sum: {
+                    $cond: [{ $eq: [{ $ifNull: ['$subscription.plan', 'free'] }, 'free'] }, 1, 0]
+                  }
+                },
+                trialUsers: {
+                  // Users currently in post-cancel/post-expiry 7-day grace trial
+                  $sum: { $cond: [{ $gt: ['$subscription.trialEnd', now] }, 1, 0] }
+                },
+                expiredUsers: {
+                  $sum: {
+                    $cond: [{ $in: ['$subscription.status', ['expired', 'cancelled']] }, 1, 0]
+                  }
+                },
+                newUsersThisWeek: {
+                  $sum: { $cond: [{ $gte: ['$createdAt', startOfWeek] }, 1, 0] }
+                },
+                newUsersThisMonth: {
+                  $sum: { $cond: [{ $gte: ['$createdAt', startOfMonth] }, 1, 0] }
+                },
+                totalRevenuePaise: { $sum: { $sum: '$payments.amountPaise' } },
+              }
+            }
+          ],
+          planBreakdown: [
+            {
+              $group: {
+                _id: { $ifNull: ['$subscription.plan', 'free'] },
+                count: { $sum: 1 },
+              }
+            }
+          ],
+          recentPayments: [
+            { $unwind: { path: '$payments', preserveNullAndEmptyArrays: false } },
+            { $sort: { 'payments.paidAt': -1 } },
+            { $limit: 10 },
+            {
+              $project: {
+                _id: 0,
+                name: 1,
+                email: 1,
+                amount: '$payments.amountPaise',
+                plan: '$payments.plan',
+                paidAt: '$payments.paidAt',
+              }
+            }
+          ],
+          uniquePayingUsers: [
+            { $match: { payments: { $elemMatch: { amountPaise: { $gt: 0 } } } } },
+            { $count: 'count' }
+          ],
+        }
       }
+    ]);
 
-      for (const p of user.payments || []) {
-        totalRevenuePaise += p.amountPaise || 0;
-        allPayments.push({
-          name: user.name,
-          email: user.email,
-          amount: p.amountPaise || 0,
-          plan: p.plan,
-          paidAt: p.paidAt,
-        });
-      }
+    const counts = agg.counts[0] || {};
+    const totalUsers        = counts.totalUsers        || 0;
+    const proUsers          = counts.proUsers          || 0;
+    const freeUsers         = counts.freeUsers         || 0;
+    const trialUsers        = counts.trialUsers        || 0;
+    const expiredUsers      = counts.expiredUsers      || 0;
+    const newUsersThisWeek  = counts.newUsersThisWeek  || 0;
+    const newUsersThisMonth = counts.newUsersThisMonth || 0;
+    const totalRevenuePaise = counts.totalRevenuePaise || 0;
+
+    const planBreakdown = {};
+    for (const { _id, count } of agg.planBreakdown) {
+      planBreakdown[_id] = count;
     }
 
-    // Recent 10 payments sorted by paidAt desc
-    // Note: same user can appear multiple times here (payment ledger, not user list)
-    allPayments.sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
-    const recentPayments = allPayments.slice(0, 10);
+    const recentPayments    = agg.recentPayments;
+    const uniquePayingUsers = agg.uniquePayingUsers[0]?.count || 0;
 
-    // Unique paying users — count of distinct users who have ≥1 real payment (not admin-granted)
-    const uniquePayingUsers = allUsers.filter(u =>
-      (u.payments || []).some(p => p.amountPaise > 0)
-    ).length;
-
-    // Trial conversion rate: proUsers / (proUsers + freeUsers past trial) * 100
-    const freeNonTrial = freeUsers - trialUsers;
-    const denominator = proUsers + freeNonTrial;
-    const trialConversionRate = denominator > 0
-      ? parseFloat(((proUsers / denominator) * 100).toFixed(2))
+    // % of active (non-expired) users who are on a paid plan
+    const activeUsers = proUsers + freeUsers;
+    const trialConversionRate = activeUsers > 0
+      ? parseFloat(((proUsers / activeUsers) * 100).toFixed(2))
       : 0;
 
     res.json({
-      totalUsers,        // unique users (never double-counts)
-      proUsers,          // unique users with active paid plan
+      totalUsers,
+      proUsers,
       freeUsers,
       trialUsers,
       expiredUsers,
-      uniquePayingUsers, // unique users who paid at least once (renewals don't inflate this)
-      totalRevenuePaise, // sum of all payments — multi-purchase users correctly add to revenue
+      uniquePayingUsers,
+      totalRevenuePaise,
       newUsersThisWeek,
       newUsersThisMonth,
       planBreakdown,
