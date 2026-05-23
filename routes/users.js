@@ -106,38 +106,12 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const PanchangaDay = require('../models/PanchangaDay');
     const now = new Date();
 
-    // Find the last date we actually have data for — cap the subscription here
-    const lastDay = await PanchangaDay.findOne({}).sort({ date: -1 }).select('date').lean();
-    const maxDataYear = lastDay ? parseInt(lastDay.date.slice(0, 4)) : now.getFullYear() + 10;
-    const maxPeriodEnd = new Date(maxDataYear, 11, 31); // Dec 31 of last data year
-
-    // Calculate period end: extend from existing ACTIVE end or from now.
-    // Only stack onto currentPeriodEnd if the subscription is genuinely still active
-    // AND the end date is within a reasonable window (≤ maxDataYear). If the stored
-    // end exceeds maxDataYear it means previous grants were miscalculated — reset to now.
-    let baseDate = now;
-    const storedEnd = user.subscription?.currentPeriodEnd
-      ? new Date(user.subscription.currentPeriodEnd)
-      : null;
-    if (
-      user.subscription?.status === 'active' &&
-      storedEnd && storedEnd > now &&
-      storedEnd <= maxPeriodEnd
-    ) {
-      baseDate = storedEnd;
-    }
-
+    // Always grant from today — admin explicitly sets the duration they want
     const yearsNum = parseInt(years);
-    const periodEnd = new Date(baseDate);
+    const periodEnd = new Date(now);
     periodEnd.setFullYear(periodEnd.getFullYear() + yearsNum);
-
-    // Hard cap: never grant beyond the last day we have panchanga data for
-    if (periodEnd > maxPeriodEnd) {
-      periodEnd.setTime(maxPeriodEnd.getTime());
-    }
 
     const recordedAmount = typeof amountPaise === 'number' && amountPaise > 0 ? amountPaise : 0;
     const paymentId = `admin-manual-${Date.now()}`;
