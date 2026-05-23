@@ -4,6 +4,13 @@ const User = require('../models/User');
 const { requireAdmin } = require('../middleware/auth');
 const requireActionPassword = require('../middleware/actionPassword');
 
+function currentVSYear(date = new Date()) {
+  const y = date.getFullYear(), m = date.getMonth(), d = date.getDate();
+  if (y > 2027 || (y === 2027 && (m > 2 || (m === 2 && d >= 19)))) return 2084;
+  if (y > 2026 || (y === 2026 && (m > 2 || (m === 2 && d >= 19)))) return 2083;
+  return 2082;
+}
+
 // All routes require admin auth
 router.use(requireAdmin);
 
@@ -122,9 +129,7 @@ router.post('/:id/subscription', requireActionPassword, async (req, res) => {
     if (!user.subscription.startedAt) {
       user.subscription.startedAt = now;
     }
-    if (plan === 'yearly') {
-      user.subscription.vsYear = (user.subscription.vsYear || 0) + yearsNum;
-    }
+    user.subscription.vsYear = currentVSYear(now);
 
     user.payments.push({
       paymentId,
